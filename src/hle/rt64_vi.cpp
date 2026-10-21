@@ -20,7 +20,11 @@ namespace RT64 {
     }
 
     hlslpp::float4 VI::cropRectangle() const {
-        return { 0.0f, 0.0f, 1.0f, 1.0f };
+        // RACER PATCH (2026-10-21): Star Wars Episode I: Racer draws (and clears) only inside its scissor, x 8..312 of
+        // 320 and y 16..464 of 480; the border is TV overscan on real hardware and keeps stale pixels. Shown as
+        // garbage blocks at the edges in 4:3 and as wide coloured strips in widescreen. Crop to the drawn area
+        // (the window behind is cleared to black).
+        return { 8.0f / 320.0f, 16.0f / 480.0f, 304.0f / 320.0f, 448.0f / 480.0f };
     }
 
     float VI::gamma() const {
