@@ -1435,6 +1435,16 @@ namespace RT64 {
         const float scissorRatio = static_cast<float>(fbPair.scissorRect.width(false, true)) / static_cast<float>(fbPair.scissorRect.height(false, true));
         const bool adjustRatio = (abs((scissorRatio / p.aspectRatioSource) - 1.0f) < SimilarityPercentage);
         const float aspectRatioScale = adjustRatio ? (p.aspectRatioTarget / p.aspectRatioSource) : 1.0f;
+        // RACER PATCH (2026-10-21): the scissor is in framebuffer pixels, aspectRatioSource is the picture's shape. With
+        // non-square pixels (Racer: 320x476 shown at 4:3, pixels 2:1) the raw ratio (0.68) never matches, so 2D
+        // rectangles (the HUD) were stretched with the widened frame. For rectangles only, compare in picture space
+        // (factor 1.0 for square pixels, so other games are unchanged); 3D keeps the decision above, which works.
+        float rectScissorRatio = scissorRatio;
+        if ((p.fbWidth > 0) && (p.fbHeight > 0)) {
+            rectScissorRatio *= p.aspectRatioSource / (float(p.fbWidth) / float(p.fbHeight));
+        }
+        const bool rectAdjustRatio = (abs((rectScissorRatio / p.aspectRatioSource) - 1.0f) < SimilarityPercentage);
+        const float rectAspectRatioScale = rectAdjustRatio ? (p.aspectRatioTarget / p.aspectRatioSource) : 1.0f;
         InstanceDrawCall instanceDrawCall;
         interop::RenderIndices renderIndices;
         uint32_t globalCallIndex = 0;
@@ -1636,6 +1646,7 @@ namespace RT64 {
                         case Projection::Type::Rectangle: {
                             instanceDrawCall.type = InstanceDrawCall::Type::RegularRect;
                             triangles.indexStart = call.meshDesc.rawVertexStart;
+                            invRatioScale = 1.0f / rectAspectRatioScale;   // RACER PATCH: see rectAspectRatioScale
 
                             bool tileCopiesUsed = false;
                             for (uint32_t t = 0; (t < call.callDesc.tileCount) && !tileCopiesUsed; t++) {
@@ -1652,6 +1663,9 @@ namespace RT64 {
                                 horizontalMisalignment = p.horizontalMisalignment;
                             }
 
+                            // (2026-10-21: anchoring each rectangle to the left / right edge by where it sits was tried and
+                            // dropped: Racer draws text one letter per rectangle, so words were torn apart. Rectangles stay
+                            // centred at their real width.)
                             RenderViewport viewportRect = convertViewportRect(call.callDesc.rect, p.resolutionScale, p.fbWidth, invRatioScale, extOriginPercentage, horizontalMisalignment, call.callDesc.rectLeftOrigin, call.callDesc.rectRightOrigin);
                             triangles.screenScale = { viewportRect.width / framebuffer.viewport.width, viewportRect.height / framebuffer.viewport.height };
                             triangles.screenOffset.x = halfPixelOffset.x + ((viewportRect.x + viewportRect.width / 2.0f) - halfViewportSize.x) / halfViewportSize.x;
