@@ -4,6 +4,10 @@
 
 #include "rt64_raster_shader.h"
 
+#if defined(__ANDROID__)
+#   include <sys/system_properties.h>
+#endif
+
 #include "xxHash/xxh3.h"
 
 #include "shaders/RenderParams.hlsli.rw.h"
@@ -348,8 +352,20 @@ namespace RT64 {
         // RACER PATCH (Android 2026-10-20): one pipeline compile at a time. Mali-G715's shader compiler
         // (libGLES_mali cmpbe_compile_gles_shader) crashed in 3 of 4 runs when the ubershader pipeline threads
         // compiled in parallel (SIGSEGV in cmpbep_destroy_llvm_context / Scudo corrupted chunk header).
+        // 2026-10-21: those crashes were the game's 16K EEPROM overflowing a 4K buffer (MTE found it), not the driver,
+        // and serial compiles made the first frame take ~25 s. Parallel again by default;
+        // `adb shell setprop debug.swe1r.serialpipe 1` brings the lock back (read once).
+        static const bool androidSerialPipelines = []() {
+            char prop[PROP_VALUE_MAX] = {};
+            __system_property_get("debug.swe1r.serialpipe", prop);
+            fprintf(stderr, "[SWE1R] RT64 pipeline compiles: %s\n", (prop[0] == '1') ? "one at a time (debug.swe1r.serialpipe=1)" : "parallel");
+            return prop[0] == '1';
+        }();
         static std::mutex androidPipelineMutex;
-        std::lock_guard<std::mutex> androidPipelineLock(androidPipelineMutex);
+        std::unique_lock<std::mutex> androidPipelineLock(androidPipelineMutex, std::defer_lock);
+        if (androidSerialPipelines) {
+            androidPipelineLock.lock();
+        }
 #endif
         return c.device->createGraphicsPipeline(pipelineDesc);
     }
