@@ -226,6 +226,8 @@ namespace RT64 {
         FramebufferStorage fbStorage;
         uint32_t viOriginalRate;
         hlslpp::uint2 viFbSize = {};
+        // RACER PATCH (2026-10-21): display aspect ratio of the VI picture (0 = use viFbSize). See rt64_state.cpp.
+        float viAspectRatio = 0.0f;
         DebuggerRenderer debuggerRenderer;
         DebuggerCamera debuggerCamera;
         std::multimap<uint32_t, uint32_t> transformIdMap;

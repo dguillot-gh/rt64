@@ -81,7 +81,11 @@ namespace RT64 {
         // Estimate the origin is off by one or two rows.
         if (siz >= G_IM_SIZ_16b) {
             const bool interlacedStep = status.serrate && (vCurrentLine & 0x1);
-            const uint32_t rowBytes = width * (1U << (siz - 1));
+            // RACER PATCH (2026-10-21): use the same effective row width as fbSize(). In interlaced modes whose VI
+            // width is twice the framebuffer width (Racer: width 640, framebuffer 320, field origin one 320-pixel
+            // row), backing up a full 640-pixel row missed the framebuffer start and the screen went black.
+            const uint32_t fbWidth = uint32_t(fbSize().x);
+            const uint32_t rowBytes = fbWidth * (1U << (siz - 1));
             const uint32_t rowCount = interlacedStep ? 2 : 1;
             const uint32_t rowOffset = rowBytes * rowCount;
             if (origin >= rowOffset) {

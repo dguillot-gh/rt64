@@ -100,7 +100,13 @@ namespace RT64 {
         // on the screen. To work around that, the viewport the buffer will be drawn in will be expanded so only
         // the region of interest is rendered. A scissor will cut it off correctly according to the coordinates
         // specified by the VI.
-        const hlslpp::float2 sdSize = removeBlackBorders ? hlslpp::float2(vi.fbSize()) : hlslpp::float2(320.0f, 240.0f);
+        hlslpp::float2 sdSize = removeBlackBorders ? hlslpp::float2(vi.fbSize()) : hlslpp::float2(320.0f, 240.0f);
+        // RACER PATCH (2026-10-21): in interlaced modes where fbSize() halved the width (Racer: 320x476 framebuffer,
+        // VI width 640, xScale 0.5) each framebuffer pixel is two dots wide. Size the picture by the VI width so it is
+        // shown 4:3 instead of squeezed to 320:476.
+        if (removeBlackBorders && (sdSize.x > 0.0f) && (sdSize.x < float(vi.width))) {
+            sdSize.x = float(vi.width);
+        }
         const hlslpp::float2 hdSize = computeHDSize(sdSize, resolutionScale, downsamplingScale);
         const hlslpp::float2 windowSize = { float(swapChain->getWidth()), float(swapChain->getHeight()) };
 

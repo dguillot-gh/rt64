@@ -344,9 +344,16 @@ namespace RT64 {
             targetBlend.dstBlendAlpha = RenderBlend::ONE;
         }
 
+#if defined(__ANDROID__)
+        // RACER PATCH (Android 2026-10-20): one pipeline compile at a time. Mali-G715's shader compiler
+        // (libGLES_mali cmpbe_compile_gles_shader) crashed in 3 of 4 runs when the ubershader pipeline threads
+        // compiled in parallel (SIGSEGV in cmpbep_destroy_llvm_context / Scudo corrupted chunk header).
+        static std::mutex androidPipelineMutex;
+        std::lock_guard<std::mutex> androidPipelineLock(androidPipelineMutex);
+#endif
         return c.device->createGraphicsPipeline(pipelineDesc);
     }
-    
+
     RenderMultisampling RasterShader::generateMultisamplingPattern(RenderSampleCounts sampleCount, bool sampleLocationsSupported) {
 #   if SAMPLE_LOCATIONS_REQUIRED
         if (!sampleLocationsSupported) {

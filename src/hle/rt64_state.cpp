@@ -1076,7 +1076,9 @@ namespace RT64 {
 
                     // Submit the shader to the cache so compilation can start right away.
                     // Ignore any calls that use fill type, as they're emulated without using a shader.
-                    if (callDesc.otherMode.cycleType() != G_CYC_FILL) {
+                    // RACER PATCH (Android 2026-10-20): with ubershadersOnly set, compile no specialized shaders at all.
+                    // Mali-G715's shader compiler (libGLES_mali cmpbe) segfaults on some specialized pipelines.
+                    if ((callDesc.otherMode.cycleType() != G_CYC_FILL) && !ext.workloadQueue->ubershadersOnly) {
                         ext.rasterShaderCache->submit(shaderDesc);
                     }
 
@@ -1594,6 +1596,14 @@ namespace RT64 {
 
         if (viHistory.top().vi.visible()) {
             workload.viFbSize = viHistory.top().vi.fbSize();
+            // RACER PATCH (2026-10-21): when fbSize() halves the width (interlaced mode whose VI width is twice the
+            // framebuffer width: Racer draws 320x480 with VI width 640 and xScale 0.5), each pixel is two dots wide.
+            // The picture is then VI width : height (640x476 = 4:3), not 320x476 (shown squeezed to 0.67).
+            const VI &topVI = viHistory.top().vi;
+            workload.viAspectRatio = 0.0f;
+            if ((workload.viFbSize.x > 0) && (workload.viFbSize.y > 0) && (workload.viFbSize.x < topVI.width)) {
+                workload.viAspectRatio = float(topVI.width) / float(workload.viFbSize.y);
+            }
         }
 
         // Log and reset profilers.
