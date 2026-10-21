@@ -3,6 +3,9 @@
 //
 
 #include "rt64_state.h"
+#if defined(__ANDROID__)
+#include <sys/system_properties.h>
+#endif
 
 #include <cassert>
 #include <cinttypes>
@@ -28,6 +31,24 @@
 #define MI_INTR_SP          0x00000001
 
 namespace RT64 {
+    // RACER PATCH (2026-10-21): on Android every tile samples raw TMEM in the raster shader. The TextureDecodeCS
+    // compute decode garbles textures on Mali-G715 (Pixel 8): wrong ground, walls and title tiles from correct RDRAM
+    // data. `adb shell setprop debug.swe1r.rawtmem 0` turns it off for A/B tests (read once at startup).
+    static bool racerForceRawTMEM() {
+#if defined(__ANDROID__)
+        static const bool value = []() {
+            char prop[PROP_VALUE_MAX] = {};
+            __system_property_get("debug.swe1r.rawtmem", prop);
+            const bool on = (prop[0] != '0');
+            fprintf(stderr, "[SWE1R] RT64 raw TMEM for all tiles: %s\n", on ? "on" : "off (debug.swe1r.rawtmem=0)");
+            return on;
+        }();
+        return value;
+#else
+        return false;
+#endif
+    }
+
     const float ShiftScaleMap[] = {
         1.0f,
         1.0f / 2.0f,
@@ -292,6 +313,11 @@ namespace RT64 {
                     // Check if we need to use raw TMEM decoding because the tile can sample more bytes than TMEM actually allows.
                     assert((dstCallTile.sampleWidth > 0) && (dstCallTile.sampleHeight > 0) && "Sample size calculation can only result in non-zero values.");
                     dstCallTile.rawTMEM = TMEMHasher::requiresRawTMEM(tile, dstCallTile.sampleWidth, dstCallTile.sampleHeight);
+                    // RACER PATCH (2026-10-21): debug.swe1r.rawtmem=1 samples every tile from raw TMEM in the raster shader
+                    // (skips the TextureDecodeCS compute decode) to find which path garbles textures on Mali.
+                    if (racerForceRawTMEM()) {
+                        dstCallTile.rawTMEM = true;
+                    }
                     
                     auto &dstRDPTile = drawData.rdpTiles[drawCall.tileIndex + t];
                     dstRDPTile.fmt = tile.fmt;
